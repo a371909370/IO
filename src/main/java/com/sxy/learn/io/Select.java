@@ -64,10 +64,7 @@ public class Select {
                             acceptHandle(key);
                         }
                         else if(key.isReadable()){
-                            readHandle(key);
-                        }
-                        else if(key.isWritable()){
-                            writeHandle(key);
+                            readHandle(key, selector);
                         }
                         /*
                         此处必须移除处理完的请求，移除的是selection中的set
@@ -78,8 +75,9 @@ public class Select {
                         keyIterator.remove();
                     }
                 }
+                //Thread.sleep(1000);
             }
-        }catch (IOException | InterruptedException e){
+        }catch (IOException e){
             e.printStackTrace();
         }
     }
@@ -91,42 +89,30 @@ public class Select {
      * @param key
      * @throws IOException
      */
-    private void readHandle(SelectionKey key) throws IOException {
+    private void readHandle(SelectionKey key, Selector selector) throws IOException {
         SocketChannel client = (SocketChannel)key.channel();
         client.configureBlocking(false);
         ByteBuffer bb = ByteBuffer.allocate(1024);
         try{
             int read = client.read(bb);
             if(read > 0) {
-                client.read(bb);
                 bb.flip();
-                byte[] b = new byte[bb.limit()];
-                bb.get(b);
-                System.out.println("read: " + new String(b));
             }else{
                 throw new ChannelException("连接中断");
             }
 
+            selector.keys().forEach(x -> {
+                Channel now = x.channel();
+                if(now instanceof SocketChannel && now!=client){
+                    try {
+                        ((SocketChannel)now).write(bb);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
+
         }catch (ChannelException e){
-            client.close();
-            key.cancel();
-        }
-    }
-
-    private void writeHandle(SelectionKey key) throws IOException, InterruptedException {
-        SocketChannel client = (SocketChannel)key.channel();
-        try{
-            client.configureBlocking(false);
-
-            byte[] b = "123".getBytes();
-            ByteBuffer bb = ByteBuffer.allocate(1024);
-            bb.put(b);
-            bb.flip();
-            client.write(bb);
-            Thread.sleep(1000);
-
-        }catch (IOException e){
-            e.printStackTrace();
             client.close();
             key.cancel();
         }
