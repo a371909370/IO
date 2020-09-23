@@ -1,12 +1,11 @@
 package com.sxy.learn.io;
 
+import io.netty.channel.ChannelException;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
+import java.nio.channels.*;
 import java.util.Iterator;
 import java.util.Set;
 
@@ -80,7 +79,7 @@ public class Select {
                     }
                 }
             }
-        }catch (IOException e){
+        }catch (IOException | InterruptedException e){
             e.printStackTrace();
         }
     }
@@ -94,36 +93,37 @@ public class Select {
      */
     private void readHandle(SelectionKey key) throws IOException {
         SocketChannel client = (SocketChannel)key.channel();
+        client.configureBlocking(false);
         ByteBuffer bb = ByteBuffer.allocate(1024);
         try{
             int read = client.read(bb);
             if(read > 0) {
-                client.configureBlocking(false);
                 client.read(bb);
                 bb.flip();
                 byte[] b = new byte[bb.limit()];
                 bb.get(b);
-                System.out.println("write: " + new String(b));
+                System.out.println("read: " + new String(b));
             }else{
-                throw new IOException();
+                throw new ChannelException("连接中断");
             }
 
-        }catch (IOException e){
+        }catch (ChannelException e){
             client.close();
             key.cancel();
         }
     }
 
-    private void writeHandle(SelectionKey key) throws IOException {
+    private void writeHandle(SelectionKey key) throws IOException, InterruptedException {
         SocketChannel client = (SocketChannel)key.channel();
         try{
-            System.out.println("enter");
             client.configureBlocking(false);
 
             byte[] b = "123".getBytes();
             ByteBuffer bb = ByteBuffer.allocate(1024);
             bb.put(b);
+            bb.flip();
             client.write(bb);
+            Thread.sleep(1000);
 
         }catch (IOException e){
             e.printStackTrace();
@@ -139,7 +139,7 @@ public class Select {
             client.configureBlocking(false);
 
             //标记为对读敏感，可以触发 isReadable()
-            client.register(selector, SelectionKey.OP_READ);
+            client.register(selector, SelectionKey.OP_READ|SelectionKey.OP_WRITE);
 
             System.out.println("----------------------------------");
             System.out.println("client: "+client.getRemoteAddress());
