@@ -67,6 +67,9 @@ public class Select {
                         else if(key.isReadable()){
                             readHandle(key);
                         }
+                        else if(key.isWritable()){
+                            writeHandle(key);
+                        }
                         /*
                         此处必须移除处理完的请求，移除的是selection中的set
                         否则会导致重复执行。而且
@@ -82,19 +85,50 @@ public class Select {
         }
     }
 
-    private void readHandle(SelectionKey key) {
+    /**
+     * 当我们切断客户端链接时，会一直出发SocketChannel读就绪事件。会出现无限循环问题。
+     * 需要我们手动关闭读取通道
+     *
+     * @param key
+     * @throws IOException
+     */
+    private void readHandle(SelectionKey key) throws IOException {
+        SocketChannel client = (SocketChannel)key.channel();
+        ByteBuffer bb = ByteBuffer.allocate(1024);
         try{
-            SocketChannel client = (SocketChannel)key.channel();
+            int read = client.read(bb);
+            if(read > 0) {
+                client.configureBlocking(false);
+                client.read(bb);
+                bb.flip();
+                byte[] b = new byte[bb.limit()];
+                bb.get(b);
+                System.out.println("write: " + new String(b));
+            }else{
+                throw new IOException();
+            }
+
+        }catch (IOException e){
+            client.close();
+            key.cancel();
+        }
+    }
+
+    private void writeHandle(SelectionKey key) throws IOException {
+        SocketChannel client = (SocketChannel)key.channel();
+        try{
+            System.out.println("enter");
             client.configureBlocking(false);
-            ByteBuffer bb = ByteBuffer.allocate(1);
-            client.read(bb);
-            bb.flip();
-            byte[] b = new byte[bb.limit()];
-            bb.get(b);
-            System.out.println("Read: " + new String(b));
+
+            byte[] b = "123".getBytes();
+            ByteBuffer bb = ByteBuffer.allocate(1024);
+            bb.put(b);
+            client.write(bb);
 
         }catch (IOException e){
             e.printStackTrace();
+            client.close();
+            key.cancel();
         }
     }
 
